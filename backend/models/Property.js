@@ -24,6 +24,10 @@ const propertySchema = new mongoose.Schema(
     city: String,
     area: String,
 
+    // Support for multiple images (up to 5)
+    images: [String],
+    
+    // Keep single image for backward compatibility
     image: String,
 
     latitude: Number,
@@ -79,6 +83,46 @@ const propertySchema = new mongoose.Schema(
       amenities: { type: Number, default: 0 },
       demand: { type: Number, default: 0 },
       ownerCredibility: { type: Number, default: 0 }
+    },
+
+    // AI-Generated Insights (cached)
+    aiInsights: {
+      score: { type: Number, min: 0, max: 100 },
+      priceRating: { type: String, enum: ["SUSPICIOUS", "EXCELLENT", "GOOD", "FAIR", "ABOVE_AVERAGE", "OVERPRICED", "VERY_OVERPRICED"] },
+      locationQuality: { type: String, enum: ["PRIME", "GOOD", "AVERAGE", "DEVELOPING"] },
+      highlights: [String],
+      concerns: [String],
+      summary: String,
+      fraudRisk: { type: String, enum: ["LOW", "MEDIUM", "HIGH"] },
+      fraudScore: { type: Number, min: 0, max: 100 },
+      fraudFlags: [String],
+      rentSuggestion: {
+        suggestedRent: Number,
+        rentRange: {
+          min: Number,
+          max: Number
+        },
+        currentPriceAssessment: String,
+        marketInsight: String,
+        negotiationTip: String
+      },
+      generatedAt: Date
+    },
+
+    // Listing type (rent/sale) for easier querying
+    listingType: {
+      type: String,
+      enum: ["rent", "sale"],
+      default: "rent"
+    },
+
+    // Additional fields for AI matching
+    bhk: Number,
+    sqft: Number,
+    furnishing: {
+      type: String,
+      enum: ["Furnished", "Semi-Furnished", "Unfurnished"],
+      default: "Unfurnished"
     }
   },
   { timestamps: true }

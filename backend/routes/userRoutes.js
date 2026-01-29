@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const User = require("../models/User");
 const Property = require("../models/Property");
+const Rating = require("../models/Rating");
 const { calculateTrustBadge, getBadgeInfo } = require("../utils/scoreCalculator");
 
 // Store OTPs in memory (in production, use Redis or database)
@@ -233,46 +234,136 @@ router.get("/stats/:userId", async (req, res) => {
   }
 });
 
-/* ================= RATE OWNER (After Deal) ================= */
+/* ================= RATE USER (After Deal) ================= */
 
 router.post("/rate", async (req, res) => {
   try {
-    const { ownerEmail, raterEmail, rating, propertyId } = req.body;
+    const { rateeEmail, raterEmail, rating, propertyId, review, ratingType } = req.body;
     
-    if (!ownerEmail || !rating) {
-      return res.status(400).json({ message: "Owner email and rating are required" });
+    if (!rateeEmail || !raterEmail || !rating || !propertyId) {
+      return res.status(400).json({ message: "Ratee email, rater email, rating, and property ID are required" });
     }
     
     if (rating < 1 || rating > 5) {
       return res.status(400).json({ message: "Rating must be between 1 and 5" });
     }
+
+    // Get both users
+    const ratee = await User.findOne({ email: rateeEmail });
+    const rater = await User.findOne({ email: raterEmail });
     
-    const owner = await User.findOne({ email: ownerEmail });
-    if (!owner) {
-      return res.status(404).json({ message: "Owner not found" });
+    if (!ratee) {
+      return res.status(404).json({ message: "User to rate not found" });
     }
+    if (!rater) {
+      return res.status(404).json({ message: "Rater not found" });
+    }
+
+    // Prevent self-rating
+    if (ratee._id.equals(rater._id)) {
+      return res.status(400).json({ message: "You cannot rate yourself" });
+    }
+
+    // Check if this rating already exists
+    const existingRating = await Rating.findOne({
+      rater: rater._id,
+      ratee: ratee._id,
+      property: propertyId
+    });
+
+    if (existingRating) {
+      return res.status(400).json({ message: "You have already rated this user for this deal" });
+    }
+
+    // Create the rating record
+    await Rating.create({
+      rater: rater._id,
+      ratee: ratee._id,
+      property: propertyId,
+      rating,
+      review: review || "",
+      ratingType: ratingType || "TENANT_TO_OWNER"
+    });
     
-    // Calculate new average rating
-    const currentTotal = (owner.rating || 0) * (owner.totalRatings || 0);
-    const newTotalRatings = (owner.totalRatings || 0) + 1;
+    // Calculate new average rating for the ratee
+    const currentTotal = (ratee.rating || 0) * (ratee.totalRatings || 0);
+    const newTotalRatings = (ratee.totalRatings || 0) + 1;
     const newRating = (currentTotal + rating) / newTotalRatings;
     
-    owner.rating = Math.round(newRating * 10) / 10; // Round to 1 decimal
-    owner.totalRatings = newTotalRatings;
-    owner.trustBadge = calculateTrustBadge(owner);
+    ratee.rating = Math.round(newRating * 10) / 10; // Round to 1 decimal
+    ratee.totalRatings = newTotalRatings;
+    ratee.trustBadge = calculateTrustBadge(ratee);
     
-    await owner.save();
+    await ratee.save();
     
     res.json({
       message: "Rating submitted successfully",
-      newRating: owner.rating,
-      totalRatings: owner.totalRatings,
-      trustBadge: owner.trustBadge,
-      badgeInfo: getBadgeInfo(owner.trustBadge)
+      newRating: ratee.rating,
+      totalRatings: ratee.totalRatings,
+      trustBadge: ratee.trustBadge,
+      badgeInfo: getBadgeInfo(ratee.trustBadge)
     });
   } catch (err) {
-    console.error("RATE OWNER ERROR:", err);
+    console.error("RATE USER ERROR:", err);
+    if (err.code === 11000) {
+      return res.status(400).json({ message: "You have already rated this user for this deal" });
+    }
     res.status(500).json({ message: "Failed to submit rating" });
+  }
+});
+
+/* ================= CHECK IF USER HAS RATED ================= */
+
+router.get("/rating/check", async (req, res) => {
+  try {
+    const { raterEmail, rateeEmail, propertyId } = req.query;
+    
+    if (!raterEmail || !rateeEmail || !propertyId) {
+      return res.status(400).json({ message: "Rater email, ratee email, and property ID are required" });
+    }
+
+    const rater = await User.findOne({ email: raterEmail });
+    const ratee = await User.findOne({ email: rateeEmail });
+
+    if (!rater || !ratee) {
+      return res.json({ hasRated: false });
+    }
+
+    const existingRating = await Rating.findOne({
+      rater: rater._id,
+      ratee: ratee._id,
+      property: propertyId
+    });
+
+    res.json({ 
+      hasRated: !!existingRating,
+      rating: existingRating ? existingRating.rating : null,
+      review: existingRating ? existingRating.review : null
+    });
+  } catch (err) {
+    console.error("CHECK RATING ERROR:", err);
+    res.status(500).json({ message: "Failed to check rating" });
+  }
+});
+
+/* ================= GET USER'S RECEIVED RATINGS ================= */
+
+router.get("/ratings/:email", async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.params.email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const ratings = await Rating.find({ ratee: user._id })
+      .populate("rater", "name email")
+      .populate("property", "title city area")
+      .sort({ createdAt: -1 });
+
+    res.json(ratings);
+  } catch (err) {
+    console.error("GET RATINGS ERROR:", err);
+    res.status(500).json({ message: "Failed to get ratings" });
   }
 });
 

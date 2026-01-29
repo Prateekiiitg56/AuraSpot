@@ -2,11 +2,11 @@ const express = require("express");
 const Property = require("../models/Property");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const RentAgreement = require("../models/RentAgreement");
 const multer = require("multer");
 const { calculatePropertyScore, getScoreDescription, calculateTrustBadge } = require("../utils/scoreCalculator");
 const { calculateAIMatchScore, getAISuggestions } = require("../utils/aiMatchEngine");
-
-console.log("🔥🔥🔥 PROPERTY ROUTES LOADED - NEW VERSION 🔥🔥🔥");
+const aiService = require("../services/aiService");
 
 const router = express.Router();
 
@@ -23,15 +23,35 @@ const upload = multer({ storage });
 
 /* ================= CREATE PROPERTY ================= */
 
-router.post("/", upload.single("image"), async (req, res) => {
+router.post("/", upload.array("images", 5), async (req, res) => {
   try {
     const owner = await User.findOne({ email: req.body.ownerEmail });
     if (!owner) return res.status(400).json({ message: "Owner not found" });
 
-    const amenities = String(req.body.amenities || "")
-      .split(",")
-      .map(a => a.trim())
-      .filter(Boolean);
+    // Handle amenities - could be JSON array or comma-separated string
+    let amenities = [];
+    const rawAmenities = req.body.amenities || "";
+    
+    if (typeof rawAmenities === "string") {
+      // Try parsing as JSON first (for backward compatibility)
+      try {
+        const parsed = JSON.parse(rawAmenities);
+        if (Array.isArray(parsed)) {
+          amenities = parsed.map(a => String(a).trim()).filter(Boolean);
+        } else {
+          amenities = String(rawAmenities).split(",").map(a => a.trim()).filter(Boolean);
+        }
+      } catch {
+        // Not JSON, split by comma
+        amenities = String(rawAmenities).split(",").map(a => a.trim()).filter(Boolean);
+      }
+    } else if (Array.isArray(rawAmenities)) {
+      amenities = rawAmenities.map(a => String(a).trim()).filter(Boolean);
+    }
+
+    // Handle multiple images
+    const imageFiles = req.files || [];
+    const imageFilenames = imageFiles.map(file => file.filename);
 
     const property = await Property.create({
       title: req.body.title,
@@ -44,10 +64,26 @@ router.post("/", upload.single("image"), async (req, res) => {
       longitude: Number(req.body.longitude),
       amenities,
       description: req.body.description,
-      image: req.file?.filename,
+      images: imageFilenames,
+      image: imageFilenames[0] || null, // Keep first image for backward compatibility
       owner: owner._id,
-      status: "AVAILABLE"
+      status: "AVAILABLE",
+      // Set listing type based on purpose
+      listingType: req.body.purpose?.toLowerCase() === "sale" ? "sale" : "rent",
+      bhk: req.body.bhk ? Number(req.body.bhk) : undefined,
+      sqft: req.body.sqft ? Number(req.body.sqft) : undefined,
+      furnishing: req.body.furnishing || "Unfurnished"
     });
+
+    // Background AI insights generation (non-blocking)
+    aiService.generatePropertyInsights(property)
+      .then(insights => {
+        if (insights) {
+          Property.findByIdAndUpdate(property._id, { aiInsights: insights }).catch(console.error);
+          console.log(`[AI] Generated insights for property ${property._id}`);
+        }
+      })
+      .catch(err => console.error("[AI] Background insights error:", err));
 
     res.json(property);
   } catch (err) {
@@ -148,12 +184,10 @@ router.delete("/:id", async (req, res) => {
   try {
     // Delete all notifications related to this property
     await Notification.deleteMany({ property: req.params.id });
-    console.log(`Deleted notifications for property ${req.params.id}`);
     
     // Delete all chat messages related to this property
     const Chat = require("../models/Chat");
     await Chat.deleteMany({ property: req.params.id });
-    console.log(`Deleted chats for property ${req.params.id}`);
     
     // Delete the property
     await Property.findByIdAndDelete(req.params.id);
@@ -162,6 +196,96 @@ router.delete("/:id", async (req, res) => {
   } catch (err) {
     console.error("DELETE ERROR:", err);
     res.status(500).json({ message: "Failed to delete property" });
+  }
+});
+
+/* ================= UPDATE PROPERTY ================= */
+
+router.put("/:id", upload.array("images", 5), async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id).populate("owner");
+    
+    if (!property) {
+      return res.status(404).json({ message: "Property not found" });
+    }
+
+    // Verify ownership
+    const ownerEmail = req.body.ownerEmail;
+    if (property.owner.email !== ownerEmail) {
+      return res.status(403).json({ message: "You can only edit your own properties" });
+    }
+
+    // Handle amenities - could be JSON array or comma-separated string
+    let amenities = property.amenities;
+    if (req.body.amenities !== undefined) {
+      const rawAmenities = req.body.amenities || "";
+      if (typeof rawAmenities === "string") {
+        try {
+          const parsed = JSON.parse(rawAmenities);
+          if (Array.isArray(parsed)) {
+            amenities = parsed.map(a => String(a).trim()).filter(Boolean);
+          } else {
+            amenities = String(rawAmenities).split(",").map(a => a.trim()).filter(Boolean);
+          }
+        } catch {
+          amenities = String(rawAmenities).split(",").map(a => a.trim()).filter(Boolean);
+        }
+      } else if (Array.isArray(rawAmenities)) {
+        amenities = rawAmenities.map(a => String(a).trim()).filter(Boolean);
+      }
+    }
+
+    // Handle new images if uploaded
+    const imageFiles = req.files || [];
+    let images = property.images || [];
+    if (imageFiles.length > 0) {
+      const newImageFilenames = imageFiles.map(file => file.filename);
+      images = [...images, ...newImageFilenames].slice(0, 5); // Keep max 5 images
+    }
+
+    // Update fields
+    const updateData = {
+      title: req.body.title || property.title,
+      type: req.body.type || property.type,
+      purpose: req.body.purpose || property.purpose,
+      price: req.body.price ? Number(req.body.price) : property.price,
+      city: req.body.city || property.city,
+      area: req.body.area || property.area,
+      description: req.body.description !== undefined ? req.body.description : property.description,
+      amenities,
+      images,
+      image: images[0] || property.image,
+      bhk: req.body.bhk ? Number(req.body.bhk) : property.bhk,
+      sqft: req.body.sqft ? Number(req.body.sqft) : property.sqft,
+      furnishing: req.body.furnishing || property.furnishing,
+      listingType: req.body.purpose?.toLowerCase() === "sale" ? "sale" : "rent"
+    };
+
+    // Only update coordinates if provided
+    if (req.body.latitude) updateData.latitude = Number(req.body.latitude);
+    if (req.body.longitude) updateData.longitude = Number(req.body.longitude);
+
+    const updatedProperty = await Property.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    ).populate("owner", "name email");
+
+    // Clear AI cache and regenerate insights
+    aiService.clearPropertyCache(req.params.id);
+    aiService.generatePropertyInsights(updatedProperty)
+      .then(insights => {
+        if (insights) {
+          Property.findByIdAndUpdate(req.params.id, { aiInsights: insights }).catch(console.error);
+          console.log(`[AI] Regenerated insights for updated property ${req.params.id}`);
+        }
+      })
+      .catch(err => console.error("[AI] Background insights error:", err));
+
+    res.json(updatedProperty);
+  } catch (err) {
+    console.error("UPDATE PROPERTY ERROR:", err);
+    res.status(500).json({ message: "Failed to update property" });
   }
 });
 
@@ -192,16 +316,10 @@ router.post("/:id/reset", async (req, res) => {
 
 router.post("/:id/request", async (req, res) => {
   try {
-    console.log("=== REQUEST RECEIVED ===");
-    console.log("Email from request:", req.body.email);
-    console.log("Message:", req.body.message);
-    
     const user = await User.findOne({ email: req.body.email });
-    console.log("User found:", user);
     
     if (!user) {
-      console.log("USER NOT FOUND - returning 400");
-      return res.status(400).json({ message: "⚠️ USER_NOT_FOUND_IN_DATABASE ⚠️" });
+      return res.status(400).json({ message: "User not found" });
     }
 
     const property = await Property.findById(req.params.id)
@@ -226,7 +344,6 @@ router.post("/:id/request", async (req, res) => {
       message: req.body.message || `${user.name || user.email} is interested in your ${property.type} for ${property.purpose}`
     });
 
-    console.log("=== REQUEST SUCCESS ===");
     res.json({ ok: true });
   } catch (err) {
     console.error("SEND REQUEST ERROR:", err);
@@ -317,7 +434,39 @@ router.post("/:id/approve", async (req, res) => {
         owner.successfulDeals = (owner.successfulDeals || 0) + 1;
         owner.trustBadge = calculateTrustBadge(owner);
         await owner.save();
-        console.log(`Owner ${owner.email} now has ${owner.successfulDeals} successful deals`);
+      }
+    }
+
+    // AUTO-CREATE RENT AGREEMENT for RENT properties
+    if (property.purpose === "RENT" && property.assignedTo && property.owner) {
+      try {
+        const startDate = new Date();
+        const nextPayment = new Date();
+        nextPayment.setMonth(nextPayment.getMonth() + 1);
+        nextPayment.setDate(Math.min(startDate.getDate(), 28));
+
+        await RentAgreement.create({
+          property: property._id,
+          owner: property.owner._id,
+          tenant: property.assignedTo._id,
+          rentAmount: property.price,
+          rentalStartDate: startDate,
+          nextPaymentDate: nextPayment,
+          paymentCycleDay: Math.min(startDate.getDate(), 28),
+          paymentStatus: "PENDING",
+          status: "ACTIVE"
+        });
+
+        // Notify tenant about rent agreement
+        await Notification.create({
+          from: property.owner._id,
+          to: property.assignedTo._id,
+          property: property._id,
+          action: "RENT_AGREEMENT_CREATED",
+          message: `Rent agreement created! Monthly rent: ₹${property.price}. First payment due: ${nextPayment.toLocaleDateString()}`
+        });
+      } catch (rentErr) {
+        // Silent fail for rent agreement creation
       }
     }
 
@@ -331,21 +480,19 @@ router.post("/:id/approve", async (req, res) => {
           action: "ACCEPTED",
           message: `Your request for ${property.title} has been accepted!`
         });
-        console.log(`Acceptance notification sent to user ${property.assignedTo.email}`);
       } catch (notifErr) {
-        console.log("Failed to create acceptance notification:", notifErr);
+        // Silent fail for notification
       }
     }
 
     // Delete ALL request notifications for this property
     try {
-      const deleteResult = await Notification.deleteMany({ 
+      await Notification.deleteMany({ 
         property: req.params.id,
-        action: { $ne: "ACCEPTED" }
+        action: { $nin: ["ACCEPTED", "RENT_AGREEMENT_CREATED"] }
       });
-      console.log(`Deleted ${deleteResult.deletedCount} request notifications for property ${req.params.id}`);
     } catch (notifErr) {
-      console.log("Notification delete error:", notifErr);
+      // Silent fail for notification cleanup
     }
 
     res.json({ ok: true, property });

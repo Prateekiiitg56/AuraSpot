@@ -75,6 +75,29 @@ const Notifications = () => {
     }
   };
 
+  /* ================= DELETE NOTIFICATION ================= */
+
+  const deleteNotification = async (notificationId: string) => {
+    if (!window.confirm("Are you sure you want to delete this notification?")) return;
+
+    try {
+      const res = await fetch(`${API}/notifications/${notificationId}`, {
+        method: "DELETE"
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Delete failed");
+      }
+
+      // Refresh notifications
+      await loadNotifications();
+    } catch (err) {
+      console.error("Delete notification error:", err);
+      alert("Failed to delete notification");
+    }
+  };
+
   if (loading) {
     return (
       <div className="page" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "80vh" }}>
@@ -245,8 +268,6 @@ const Notifications = () => {
                         if (propId) {
                           navigate(`/chat/${propId}`);
                         } else {
-                          // If no property ID, try to navigate to user's profile or show error
-                          console.log("Note data:", note);
                           alert("Property ID not available. The property may have been deleted.");
                         }
                       }}
@@ -362,32 +383,58 @@ const Notifications = () => {
                   <small style={{ color: "#64748b", fontSize: "12px" }}>
                     {new Date(note.createdAt).toLocaleString()}
                   </small>
-                  <Link
-                    to={`/user/${note.from?.email}`}
-                    style={{
-                      display: "inline-block",
-                      padding: "8px 16px",
-                      background: "rgba(168, 85, 247, 0.2)",
-                      border: "1px solid rgba(168, 85, 247, 0.3)",
-                      color: "#d8b4fe",
-                      borderRadius: "6px",
-                      textDecoration: "none",
-                      fontSize: "12px",
-                      fontWeight: "600",
-                      cursor: "pointer",
-                      transition: "all 0.3s ease"
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(168, 85, 247, 0.3)";
-                      (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(168, 85, 247, 0.5)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(168, 85, 247, 0.2)";
-                      (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(168, 85, 247, 0.3)";
-                    }}
-                  >
-                    👤 Profile
-                  </Link>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <Link
+                      to={`/user/${note.from?.email}`}
+                      style={{
+                        display: "inline-block",
+                        padding: "8px 16px",
+                        background: "rgba(168, 85, 247, 0.2)",
+                        border: "1px solid rgba(168, 85, 247, 0.3)",
+                        color: "#d8b4fe",
+                        borderRadius: "6px",
+                        textDecoration: "none",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.3s ease"
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(168, 85, 247, 0.3)";
+                        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(168, 85, 247, 0.5)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(168, 85, 247, 0.2)";
+                        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(168, 85, 247, 0.3)";
+                      }}
+                    >
+                      👤 Profile
+                    </Link>
+                    <button
+                      onClick={() => deleteNotification(note._id)}
+                      style={{
+                        padding: "8px 16px",
+                        background: "rgba(239, 68, 68, 0.2)",
+                        border: "1px solid rgba(239, 68, 68, 0.3)",
+                        color: "#fca5a5",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.3s ease"
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.3)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239, 68, 68, 0.5)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.2)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239, 68, 68, 0.3)";
+                      }}
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

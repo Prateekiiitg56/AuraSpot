@@ -4,6 +4,7 @@ import { auth } from "../services/firebase";
 import { useState, useEffect } from "react";
 import { API } from "../services/api";
 import { useTheme } from "../context/ThemeContext";
+import { Link } from "react-router-dom";
 
 interface UserProfile {
   _id: string;
@@ -53,6 +54,38 @@ interface UserStats {
   };
 }
 
+interface RentalHistory {
+  _id: string;
+  property: {
+    _id: string;
+    title: string;
+    type: string;
+    city: string;
+    area?: string;
+    price: number;
+    image?: string;
+    images?: string[];
+  };
+  owner: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  tenant: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  rentAmount: number;
+  rentalStartDate: string;
+  rentalEndDate: string;
+  status: string;
+  userRole: "OWNER" | "TENANT";
+  durationMonths?: number;
+  totalPayments?: number;
+  totalAmountPaid?: number;
+}
+
 const Profile = ({ user }: { user: User | null }) => {
   const { darkMode } = useTheme();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -85,9 +118,37 @@ const Profile = ({ user }: { user: User | null }) => {
   const [documentNumber, setDocumentNumber] = useState("");
   const [verifying, setVerifying] = useState(false);
 
+  // Rental history state
+  const [activeTab, setActiveTab] = useState<"profile" | "history">("profile");
+  const [rentalHistory, setRentalHistory] = useState<RentalHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   useEffect(() => {
     loadProfile();
   }, [user]);
+
+  useEffect(() => {
+    if (activeTab === "history" && user?.email) {
+      loadRentalHistory();
+    }
+  }, [activeTab, user]);
+
+  const loadRentalHistory = async () => {
+    if (!user?.email) return;
+    
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API}/rent/history/${user.email}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRentalHistory(data);
+      }
+    } catch (err) {
+      console.error("Failed to load rental history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const sendPhoneOTP = async () => {
     if (!user?.email || !editForm.phone.trim()) {
@@ -775,6 +836,73 @@ const Profile = ({ user }: { user: User | null }) => {
           flexDirection: "column",
           gap: "20px"
         }}>
+          {/* Tab Navigation */}
+          <div style={{
+            display: "flex",
+            gap: "8px",
+            background: darkMode ? "#1a1a2e" : "white",
+            borderRadius: "12px",
+            padding: "8px",
+            border: "1px solid " + (darkMode ? "#252540" : "#e5e7eb")
+          }}>
+            <button
+              onClick={() => setActiveTab("profile")}
+              style={{
+                flex: 1,
+                padding: "12px 20px",
+                background: activeTab === "profile" 
+                  ? (darkMode ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "#4f46e5")
+                  : "transparent",
+                color: activeTab === "profile" ? "white" : (darkMode ? "#9ca3af" : "#6b7280"),
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: "600",
+                fontSize: "14px",
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+            >
+              👤 Profile
+            </button>
+            <button
+              onClick={() => setActiveTab("history")}
+              style={{
+                flex: 1,
+                padding: "12px 20px",
+                background: activeTab === "history" 
+                  ? (darkMode ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "#4f46e5")
+                  : "transparent",
+                color: activeTab === "history" ? "white" : (darkMode ? "#9ca3af" : "#6b7280"),
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: "600",
+                fontSize: "14px",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px"
+              }}
+            >
+              📜 Rental History
+              {rentalHistory.length > 0 && (
+                <span style={{
+                  background: activeTab === "history" ? "rgba(255,255,255,0.2)" : (darkMode ? "#667eea" : "#4f46e5"),
+                  color: "white",
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  fontSize: "12px"
+                }}>
+                  {rentalHistory.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Profile Tab Content */}
+          {activeTab === "profile" && (
+            <>
           {/* Professional Bio Section */}
           <div style={{
             background: darkMode ? "#1a1a2e" : "white",
@@ -1404,6 +1532,264 @@ const Profile = ({ user }: { user: User | null }) => {
               </p>
             </div>
           )}
+            </>
+          )}
+
+          {/* History Tab Content */}
+          {activeTab === "history" && (
+            <div style={{
+              background: darkMode ? "#1a1a2e" : "white",
+              borderRadius: "12px",
+              padding: "24px",
+              border: "1px solid " + (darkMode ? "#252540" : "#e5e7eb")
+            }}>
+              <h3 style={{
+                fontSize: "20px",
+                fontWeight: "600",
+                color: darkMode ? "white" : "#000",
+                marginBottom: "20px",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px"
+              }}>
+                📜 Rental History
+                <span style={{
+                  fontSize: "14px",
+                  color: darkMode ? "#9ca3af" : "#6b7280",
+                  fontWeight: "400"
+                }}>
+                  ({rentalHistory.length} completed agreements)
+                </span>
+              </h3>
+
+              {historyLoading ? (
+                <div style={{
+                  textAlign: "center",
+                  padding: "40px",
+                  color: darkMode ? "#9ca3af" : "#6b7280"
+                }}>
+                  Loading history...
+                </div>
+              ) : rentalHistory.length === 0 ? (
+                <div style={{
+                  textAlign: "center",
+                  padding: "60px 20px",
+                  color: darkMode ? "#9ca3af" : "#6b7280"
+                }}>
+                  <div style={{ fontSize: "48px", marginBottom: "16px" }}>📋</div>
+                  <p style={{ marginBottom: "8px" }}>No rental history yet</p>
+                  <p style={{ fontSize: "14px" }}>
+                    Completed or terminated rent agreements will appear here
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {rentalHistory.map((history) => (
+                    <div
+                      key={history._id}
+                      style={{
+                        background: darkMode ? "#252540" : "#f9fafb",
+                        borderRadius: "12px",
+                        padding: "20px",
+                        border: "1px solid " + (darkMode ? "#333" : "#e5e7eb")
+                      }}
+                    >
+                      {/* Header with property info */}
+                      <div style={{
+                        display: "flex",
+                        gap: "16px",
+                        marginBottom: "16px"
+                      }}>
+                        {/* Property Image */}
+                        <div style={{
+                          width: "100px",
+                          height: "80px",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          flexShrink: 0,
+                          background: darkMode ? "#1a1a2e" : "#e5e7eb"
+                        }}>
+                          {history.property?.image || history.property?.images?.[0] ? (
+                            <img
+                              src={`http://localhost:5000/uploads/${history.property.image || history.property.images?.[0]}`}
+                              alt={history.property.title}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover"
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "24px"
+                            }}>
+                              🏠
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Property Details */}
+                        <div style={{ flex: 1 }}>
+                          <Link 
+                            to={`/property/${history.property._id}`}
+                            style={{
+                              fontSize: "16px",
+                              fontWeight: "600",
+                              color: darkMode ? "white" : "#111827",
+                              textDecoration: "none",
+                              marginBottom: "4px",
+                              display: "block"
+                            }}
+                          >
+                            {history.property?.title || "Property"}
+                          </Link>
+                          <p style={{
+                            fontSize: "14px",
+                            color: darkMode ? "#9ca3af" : "#6b7280",
+                            margin: "4px 0"
+                          }}>
+                            📍 {history.property?.area ? `${history.property.area}, ` : ""}{history.property?.city}
+                          </p>
+                          <div style={{
+                            display: "flex",
+                            gap: "12px",
+                            flexWrap: "wrap",
+                            marginTop: "8px"
+                          }}>
+                            <span style={{
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              background: history.userRole === "OWNER" 
+                                ? "rgba(16, 185, 129, 0.1)" 
+                                : "rgba(59, 130, 246, 0.1)",
+                              color: history.userRole === "OWNER" ? "#10b981" : "#3b82f6"
+                            }}>
+                              {history.userRole === "OWNER" ? "👑 As Owner" : "🏠 As Tenant"}
+                            </span>
+                            <span style={{
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              background: history.status === "TERMINATED" 
+                                ? "rgba(239, 68, 68, 0.1)" 
+                                : "rgba(16, 185, 129, 0.1)",
+                              color: history.status === "TERMINATED" ? "#ef4444" : "#10b981"
+                            }}>
+                              {history.status === "TERMINATED" ? "🔴 Terminated" : "✅ Completed"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Rent Amount */}
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{
+                            fontSize: "18px",
+                            fontWeight: "700",
+                            color: "#667eea"
+                          }}>
+                            ₹{history.rentAmount?.toLocaleString()}
+                          </div>
+                          <div style={{
+                            fontSize: "12px",
+                            color: darkMode ? "#9ca3af" : "#6b7280"
+                          }}>
+                            per month
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Agreement Details */}
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                        gap: "12px",
+                        paddingTop: "16px",
+                        borderTop: "1px solid " + (darkMode ? "#333" : "#e5e7eb")
+                      }}>
+                        <div>
+                          <div style={{
+                            fontSize: "12px",
+                            color: darkMode ? "#6b7280" : "#9ca3af",
+                            marginBottom: "4px"
+                          }}>
+                            {history.userRole === "OWNER" ? "Tenant" : "Owner"}
+                          </div>
+                          <div style={{
+                            fontSize: "14px",
+                            color: darkMode ? "white" : "#111827",
+                            fontWeight: "500"
+                          }}>
+                            {history.userRole === "OWNER" 
+                              ? history.tenant?.name 
+                              : history.owner?.name}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{
+                            fontSize: "12px",
+                            color: darkMode ? "#6b7280" : "#9ca3af",
+                            marginBottom: "4px"
+                          }}>
+                            Duration
+                          </div>
+                          <div style={{
+                            fontSize: "14px",
+                            color: darkMode ? "white" : "#111827",
+                            fontWeight: "500"
+                          }}>
+                            {history.durationMonths || 0} months
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{
+                            fontSize: "12px",
+                            color: darkMode ? "#6b7280" : "#9ca3af",
+                            marginBottom: "4px"
+                          }}>
+                            Period
+                          </div>
+                          <div style={{
+                            fontSize: "14px",
+                            color: darkMode ? "white" : "#111827",
+                            fontWeight: "500"
+                          }}>
+                            {new Date(history.rentalStartDate).toLocaleDateString("en-IN", { month: "short", year: "numeric" })} - {new Date(history.rentalEndDate).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{
+                            fontSize: "12px",
+                            color: darkMode ? "#6b7280" : "#9ca3af",
+                            marginBottom: "4px"
+                          }}>
+                            Total Paid
+                          </div>
+                          <div style={{
+                            fontSize: "14px",
+                            color: "#10b981",
+                            fontWeight: "600"
+                          }}>
+                            ₹{(history.totalAmountPaid || 0).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1411,5 +1797,3 @@ const Profile = ({ user }: { user: User | null }) => {
 };
 
 export default Profile;
-
-

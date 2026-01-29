@@ -5,8 +5,6 @@ const User = require("../models/User");
 const Property = require("../models/Property");
 const Notification = require("../models/Notification");
 
-console.log("🔥🔥🔥 CHAT ROUTES LOADED 🔥🔥🔥");
-
 // Send a message
 router.post("/", async (req, res) => {
   try {
@@ -50,9 +48,8 @@ router.post("/", async (req, res) => {
           { from: receiver._id, to: sender._id }
         ]
       });
-      console.log(`Deleted message notifications between ${sender.email} and ${receiver.email}`);
     } catch (notifErr) {
-      console.log("Failed to delete message notifications:", notifErr);
+      // Silent fail for notification cleanup
     }
     
     // Create notification for receiver that they got a message
@@ -64,9 +61,8 @@ router.post("/", async (req, res) => {
         action: "MESSAGE",
         message: `New message from ${sender.name || sender.email} about ${property.title}`
       });
-      console.log(`Message notification sent to ${receiver.email}`);
     } catch (notifErr) {
-      console.log("Failed to create message notification:", notifErr);
+      // Silent fail for notification
     }
     
     const populatedChat = await Chat.findById(chat._id)

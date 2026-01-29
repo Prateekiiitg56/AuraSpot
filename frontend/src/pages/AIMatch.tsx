@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API } from "../services/api";
+import { useTheme } from "../context/ThemeContext";
 import "../App.css";
 
 interface AIScore {
@@ -43,6 +44,7 @@ const AMENITIES_LIST = [
 
 const AIMatch: React.FC = () => {
   const navigate = useNavigate();
+  const { darkMode } = useTheme();
   
   // Form state
   const [preferredLocation, setPreferredLocation] = useState("");

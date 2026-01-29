@@ -18,8 +18,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Apply to document
     if (darkMode) {
       document.documentElement.style.colorScheme = "dark";
+      document.body.classList.remove("light-mode");
+      document.body.classList.add("dark-mode");
     } else {
       document.documentElement.style.colorScheme = "light";
+      document.body.classList.remove("dark-mode");
+      document.body.classList.add("light-mode");
     }
   }, [darkMode]);
 

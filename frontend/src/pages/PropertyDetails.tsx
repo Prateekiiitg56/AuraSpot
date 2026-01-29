@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { API } from "../services/api";
 import { auth } from "../services/firebase";
 import MapDisplay from "../components/MapDisplay";
+import { AIInsightsPanel, FraudRiskBadge, AIChatBox } from "../components/AIComponents";
 
 type Owner = {
   _id: string;
@@ -31,6 +32,7 @@ type Property = {
   latitude: number;
   longitude: number;
   image: string;
+  images?: string[];
   status: string;
   owner?: Owner;
   assignedTo?: Owner;
@@ -47,6 +49,35 @@ type Property = {
     ownerCredibility: number;
   };
 };
+
+// Maintenance request type
+type MaintenanceRequest = {
+  _id: string;
+  title: string;
+  category: string;
+  status: string;
+  priority: string;
+  createdAt: string;
+};
+
+// Maintenance categories
+const MAINTENANCE_CATEGORIES = [
+  { value: "PLUMBING", label: "🚿 Plumbing", icon: "🚿" },
+  { value: "ELECTRICAL", label: "💡 Electrical", icon: "💡" },
+  { value: "APPLIANCE", label: "🔧 Appliance", icon: "🔧" },
+  { value: "HVAC", label: "❄️ HVAC/AC", icon: "❄️" },
+  { value: "STRUCTURAL", label: "🏗️ Structural", icon: "🏗️" },
+  { value: "PEST_CONTROL", label: "🐛 Pest Control", icon: "🐛" },
+  { value: "CLEANING", label: "🧹 Cleaning", icon: "🧹" },
+  { value: "OTHER", label: "📋 Other", icon: "📋" }
+];
+
+const PRIORITY_OPTIONS = [
+  { value: "LOW", label: "Low", color: "#10b981" },
+  { value: "MEDIUM", label: "Medium", color: "#f59e0b" },
+  { value: "HIGH", label: "High", color: "#ef4444" },
+  { value: "URGENT", label: "Urgent", color: "#dc2626" }
+];
 
 // Helper functions for score display
 const getScoreColor = (score: number) => {
@@ -80,6 +111,18 @@ const PropertyDetails = () => {
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Maintenance state
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    category: "PLUMBING",
+    title: "",
+    description: "",
+    priority: "MEDIUM"
+  });
+  const [submittingMaintenance, setSubmittingMaintenance] = useState(false);
+  const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
 
   const currentUser = auth.currentUser;
 
@@ -88,10 +131,27 @@ const PropertyDetails = () => {
       const res = await fetch(`${API}/properties/${id}`);
       const data = await res.json();
       setProperty(data);
+
+      // Load maintenance requests for this property if user is tenant
+      if (currentUser && data.assignedTo?.email === currentUser.email) {
+        loadMaintenanceRequests();
+      }
     } catch (err) {
       console.error("Failed loading property", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMaintenanceRequests = async () => {
+    try {
+      const res = await fetch(`${API}/maintenance/property/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMaintenanceRequests(data);
+      }
+    } catch (err) {
+      console.error("Failed loading maintenance requests", err);
     }
   };
 
@@ -106,6 +166,11 @@ const PropertyDetails = () => {
     currentUser?.email &&
     property.owner?.email &&
     currentUser.email === property.owner.email;
+
+  const isTenant = 
+    currentUser?.email &&
+    property.assignedTo?.email &&
+    currentUser.email === property.assignedTo.email;
 
 const isUnavailable = property.status !== "AVAILABLE";
 
@@ -144,6 +209,64 @@ const canChat = currentUser && !isOwner;
       console.error("Reset error:", err);
       alert("Failed to reset property");
     }
+  };
+
+  /* ================= MAINTENANCE REQUEST ================= */
+
+  const submitMaintenanceRequest = async () => {
+    if (!currentUser || !property) return;
+
+    if (!maintenanceForm.title.trim() || !maintenanceForm.description.trim()) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    setSubmittingMaintenance(true);
+    try {
+      const res = await fetch(`${API}/maintenance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyId: property._id,
+          tenantEmail: currentUser.email,
+          category: maintenanceForm.category,
+          title: maintenanceForm.title,
+          description: maintenanceForm.description,
+          priority: maintenanceForm.priority
+        })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to submit request");
+      }
+
+      alert("Maintenance request submitted! The owner will be notified.");
+      setShowMaintenanceModal(false);
+      setMaintenanceForm({
+        category: "PLUMBING",
+        title: "",
+        description: "",
+        priority: "MEDIUM"
+      });
+      loadMaintenanceRequests();
+    } catch (err) {
+      console.error("Submit maintenance error:", err);
+      alert(`Failed to submit request: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setSubmittingMaintenance(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      PENDING: "#f59e0b",
+      APPROVED: "#3b82f6",
+      IN_PROGRESS: "#8b5cf6",
+      RESOLVED: "#10b981",
+      REJECTED: "#ef4444"
+    };
+    return colors[status] || "#6b7280";
   };
 
   /* ================= SEND REQUEST ================= */
@@ -187,29 +310,165 @@ const canChat = currentUser && !isOwner;
 
   /* ================= UI ================= */
 
+  // Get all images (combine images array with fallback to single image)
+  const allImages = property.images && property.images.length > 0 
+    ? property.images 
+    : (property.image ? [property.image] : []);
+
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % allImages.length);
+  };
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
+  };
+
   return (
     <div className="page details-page" style={{ paddingBottom: "60px" }}>
-      {/* Image Section */}
-      {property.image && (
+      {/* Image Gallery Section */}
+      {allImages.length > 0 && (
         <div style={{
           maxWidth: "900px",
           margin: "0 auto 40px",
-          borderRadius: "16px",
-          overflow: "hidden",
-          border: "1px solid rgba(102, 126, 234, 0.2)",
-          boxShadow: "0 20px 40px rgba(102, 126, 234, 0.15)"
         }}>
-          <img
-            src={`http://localhost:5000/uploads/${property.image}`}
-            className="details-img"
-            alt={property.title}
-            style={{
-              width: "100%",
-              height: "400px",
-              objectFit: "cover",
-              display: "block"
-            }}
-          />
+          {/* Main Image Container */}
+          <div style={{
+            position: "relative",
+            borderRadius: "16px",
+            overflow: "hidden",
+            border: "1px solid rgba(102, 126, 234, 0.2)",
+            boxShadow: "0 20px 40px rgba(102, 126, 234, 0.15)"
+          }}>
+            <img
+              src={`http://localhost:5000/uploads/${allImages[currentImageIndex]}`}
+              className="details-img"
+              alt={`${property.title} - Image ${currentImageIndex + 1}`}
+              style={{
+                width: "100%",
+                height: "450px",
+                objectFit: "cover",
+                display: "block"
+              }}
+            />
+            
+            {/* Navigation Arrows */}
+            {allImages.length > 1 && (
+              <>
+                <button
+                  onClick={prevImage}
+                  style={{
+                    position: "absolute",
+                    left: "16px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "50%",
+                    background: "rgba(0, 0, 0, 0.6)",
+                    color: "white",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "24px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.2s ease",
+                    backdropFilter: "blur(4px)"
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0, 0, 0, 0.8)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0, 0, 0, 0.6)"; }}
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={nextImage}
+                  style={{
+                    position: "absolute",
+                    right: "16px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "50%",
+                    background: "rgba(0, 0, 0, 0.6)",
+                    color: "white",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "24px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.2s ease",
+                    backdropFilter: "blur(4px)"
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0, 0, 0, 0.8)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0, 0, 0, 0.6)"; }}
+                >
+                  ›
+                </button>
+
+                {/* Image Counter Badge */}
+                <div style={{
+                  position: "absolute",
+                  bottom: "16px",
+                  right: "16px",
+                  background: "rgba(0, 0, 0, 0.7)",
+                  color: "white",
+                  padding: "8px 14px",
+                  borderRadius: "20px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  backdropFilter: "blur(4px)"
+                }}>
+                  {currentImageIndex + 1} / {allImages.length}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Thumbnail Strip */}
+          {allImages.length > 1 && (
+            <div style={{
+              display: "flex",
+              gap: "12px",
+              marginTop: "16px",
+              justifyContent: "center",
+              flexWrap: "wrap"
+            }}>
+              {allImages.map((img, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentImageIndex(index)}
+                  style={{
+                    width: "80px",
+                    height: "60px",
+                    padding: 0,
+                    border: currentImageIndex === index 
+                      ? "3px solid #667eea" 
+                      : "2px solid rgba(102, 126, 234, 0.2)",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    opacity: currentImageIndex === index ? 1 : 0.6,
+                    transition: "all 0.2s ease",
+                    background: "none"
+                  }}
+                  onMouseEnter={(e) => { if (currentImageIndex !== index) e.currentTarget.style.opacity = "0.9"; }}
+                  onMouseLeave={(e) => { if (currentImageIndex !== index) e.currentTarget.style.opacity = "0.6"; }}
+                >
+                  <img
+                    src={`http://localhost:5000/uploads/${img}`}
+                    alt={`Thumbnail ${index + 1}`}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover"
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -372,6 +631,26 @@ const canChat = currentUser && !isOwner;
           )}
         </div>
       )}
+
+      {/* AI Analysis Section */}
+      <div style={{ 
+        maxWidth: "900px", 
+        margin: "0 auto 40px",
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+        gap: "24px"
+      }}>
+        {/* AI Insights Panel */}
+        <AIInsightsPanel propertyId={property._id} />
+        
+        {/* AI Chat Box */}
+        <AIChatBox propertyId={property._id} />
+      </div>
+
+      {/* Fraud Risk Badge */}
+      <div style={{ maxWidth: "900px", margin: "0 auto 24px" }}>
+        <FraudRiskBadge propertyId={property._id} />
+      </div>
 
       {/* Main Content */}
       <div style={{ maxWidth: "900px", margin: "0 auto" }}>
@@ -719,7 +998,335 @@ const canChat = currentUser && !isOwner;
             <p style={{ margin: "0" }}>Login to contact the owner</p>
           </div>
         )}
+
+        {/* Maintenance Section - Only for Tenants */}
+        {isTenant && (
+          <div style={{ marginTop: "48px" }}>
+            <div style={{ 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
+              marginBottom: "16px",
+              flexWrap: "wrap",
+              gap: "12px"
+            }}>
+              <h2 style={{ fontSize: "24px", margin: 0, color: "#f1f5f9" }}>🔧 Maintenance</h2>
+              <button
+                onClick={() => setShowMaintenanceModal(true)}
+                style={{
+                  padding: "12px 24px",
+                  background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "600",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  transition: "all 0.3s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(245, 158, 11, 0.4)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "none";
+                }}
+              >
+                🛠️ Report Issue
+              </button>
+            </div>
+
+            {/* Recent Maintenance Requests */}
+            {maintenanceRequests.length > 0 ? (
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px"
+              }}>
+                {maintenanceRequests.slice(0, 3).map((req) => (
+                  <div
+                    key={req._id}
+                    style={{
+                      padding: "16px",
+                      background: "linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(45, 55, 72, 0.8) 100%)",
+                      border: "1px solid rgba(102, 126, 234, 0.2)",
+                      borderRadius: "12px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "12px"
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: "200px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "16px" }}>
+                          {MAINTENANCE_CATEGORIES.find(c => c.value === req.category)?.icon || "📋"}
+                        </span>
+                        <span style={{ color: "#f1f5f9", fontWeight: "600" }}>{req.title}</span>
+                      </div>
+                      <span style={{ color: "#94a3b8", fontSize: "12px" }}>
+                        {new Date(req.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span style={{
+                        padding: "4px 10px",
+                        background: `${getStatusColor(req.status)}20`,
+                        color: getStatusColor(req.status),
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        fontWeight: "600"
+                      }}>
+                        {req.status.replace("_", " ")}
+                      </span>
+                      <span style={{
+                        padding: "4px 10px",
+                        background: `${PRIORITY_OPTIONS.find(p => p.value === req.priority)?.color || "#6b7280"}20`,
+                        color: PRIORITY_OPTIONS.find(p => p.value === req.priority)?.color || "#6b7280",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        fontWeight: "600"
+                      }}>
+                        {req.priority}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {maintenanceRequests.length > 3 && (
+                  <Link
+                    to="/maintenance"
+                    style={{
+                      color: "#667eea",
+                      textDecoration: "none",
+                      fontSize: "14px",
+                      textAlign: "center",
+                      padding: "12px"
+                    }}
+                  >
+                    View all {maintenanceRequests.length} requests →
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div style={{
+                padding: "24px",
+                background: "linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(45, 55, 72, 0.8) 100%)",
+                border: "1px solid rgba(102, 126, 234, 0.2)",
+                borderRadius: "12px",
+                textAlign: "center",
+                color: "#94a3b8"
+              }}>
+                <p style={{ margin: 0 }}>No maintenance requests yet. Report any issues with the property!</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Maintenance Request Modal */}
+      {showMaintenanceModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0, 0, 0, 0.8)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          padding: "20px"
+        }}>
+          <div style={{
+            background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+            borderRadius: "16px",
+            padding: "32px",
+            maxWidth: "500px",
+            width: "100%",
+            maxHeight: "90vh",
+            overflowY: "auto",
+            border: "1px solid rgba(102, 126, 234, 0.2)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+              <h3 style={{ margin: 0, color: "#f1f5f9", fontSize: "20px" }}>🛠️ Report Maintenance Issue</h3>
+              <button
+                onClick={() => setShowMaintenanceModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#94a3b8",
+                  fontSize: "24px",
+                  cursor: "pointer"
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Category Selection */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", color: "#cbd5e1", fontSize: "14px" }}>
+                Category
+              </label>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: "8px"
+              }}>
+                {MAINTENANCE_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.value}
+                    onClick={() => setMaintenanceForm(prev => ({ ...prev, category: cat.value }))}
+                    style={{
+                      padding: "12px 8px",
+                      background: maintenanceForm.category === cat.value
+                        ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                        : "rgba(30, 41, 59, 0.8)",
+                      border: maintenanceForm.category === cat.value
+                        ? "1px solid #667eea"
+                        : "1px solid rgba(102, 126, 234, 0.2)",
+                      borderRadius: "8px",
+                      color: "#f1f5f9",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      textAlign: "center",
+                      transition: "all 0.2s ease"
+                    }}
+                  >
+                    <div style={{ fontSize: "20px", marginBottom: "4px" }}>{cat.icon}</div>
+                    {cat.label.split(" ")[1]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Priority Selection */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", color: "#cbd5e1", fontSize: "14px" }}>
+                Priority
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {PRIORITY_OPTIONS.map((pri) => (
+                  <button
+                    key={pri.value}
+                    onClick={() => setMaintenanceForm(prev => ({ ...prev, priority: pri.value }))}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      background: maintenanceForm.priority === pri.value
+                        ? `${pri.color}30`
+                        : "rgba(30, 41, 59, 0.8)",
+                      border: maintenanceForm.priority === pri.value
+                        ? `2px solid ${pri.color}`
+                        : "1px solid rgba(102, 126, 234, 0.2)",
+                      borderRadius: "8px",
+                      color: maintenanceForm.priority === pri.value ? pri.color : "#cbd5e1",
+                      cursor: "pointer",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      transition: "all 0.2s ease"
+                    }}
+                  >
+                    {pri.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Title */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", color: "#cbd5e1", fontSize: "14px" }}>
+                Issue Title
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Leaking faucet in bathroom"
+                value={maintenanceForm.title}
+                onChange={(e) => setMaintenanceForm(prev => ({ ...prev, title: e.target.value }))}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(102, 126, 234, 0.3)",
+                  borderRadius: "8px",
+                  color: "#f1f5f9",
+                  outline: "none",
+                  fontSize: "14px"
+                }}
+              />
+            </div>
+
+            {/* Description */}
+            <div style={{ marginBottom: "24px" }}>
+              <label style={{ display: "block", marginBottom: "8px", color: "#cbd5e1", fontSize: "14px" }}>
+                Description
+              </label>
+              <textarea
+                placeholder="Describe the issue in detail..."
+                value={maintenanceForm.description}
+                onChange={(e) => setMaintenanceForm(prev => ({ ...prev, description: e.target.value }))}
+                rows={4}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(102, 126, 234, 0.3)",
+                  borderRadius: "8px",
+                  color: "#f1f5f9",
+                  outline: "none",
+                  fontSize: "14px",
+                  resize: "vertical"
+                }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setShowMaintenanceModal(false)}
+                style={{
+                  flex: 1,
+                  padding: "14px",
+                  background: "rgba(30, 41, 59, 0.8)",
+                  border: "1px solid rgba(102, 126, 234, 0.3)",
+                  borderRadius: "8px",
+                  color: "#cbd5e1",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitMaintenanceRequest}
+                disabled={submittingMaintenance}
+                style={{
+                  flex: 1,
+                  padding: "14px",
+                  background: submittingMaintenance
+                    ? "rgba(102, 126, 234, 0.5)"
+                    : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  border: "none",
+                  borderRadius: "8px",
+                  color: "white",
+                  cursor: submittingMaintenance ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600"
+                }}
+              >
+                {submittingMaintenance ? "Submitting..." : "Submit Request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

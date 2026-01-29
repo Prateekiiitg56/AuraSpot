@@ -8,6 +8,7 @@ import { auth } from "./services/firebase";
 import { ThemeProvider } from "./context/ThemeContext";
 
 import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 import Home from "./pages/home";
 import Profile from "./pages/Profile";
 import UserProfile from "./pages/UserProfile";
@@ -21,6 +22,9 @@ import Notifications from "./pages/Notifications";
 import MyDeals from "./pages/MyDeals";
 import Chat from "./pages/Chat";
 import AIMatch from "./pages/AIMatch";
+import RentManager from "./pages/RentManager";
+import Maintenance from "./pages/Maintenance";
+import Analytics from "./pages/Analytics";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -29,8 +33,7 @@ useEffect(() => {
   const unsub = onAuthStateChanged(auth, async currentUser => {
     if (currentUser) {
       try {
-        console.log("Syncing user to MongoDB:", currentUser.email);
-        const res = await fetch(`${API}/users/sync`, {
+        await fetch(`${API}/users/sync`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -39,11 +42,8 @@ useEffect(() => {
             email: currentUser.email
           })
         });
-        
-        const data = await res.json();
-        console.log("User synced:", data);
       } catch (err) {
-        console.error("User sync error:", err);
+        // Silent fail - user sync is non-critical
       }
     }
 
@@ -57,23 +57,32 @@ useEffect(() => {
   return (
     <ThemeProvider>
       <Router>
-        <Navbar user={user} />
+        <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+          <Navbar user={user} />
 
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/add" element={<AddProperty />} />
-          <Route path="/profile" element={<Profile user={user} />} />
-          <Route path="/user/:email" element={<UserProfile />} />
-          <Route path="/property/:id" element={<PropertyDetails />} />
-          <Route path="/notifications" element={<Notifications />} />
-          <Route path="/my-deals" element={<MyDeals />} />
-          <Route path="/chat/:propertyId" element={<Chat />} />
-          <Route path="/ai-match" element={<AIMatch />} />
+          <div style={{ flex: 1 }}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/explore" element={<Explore />} />
+              <Route path="/add" element={<AddProperty />} />
+              <Route path="/profile" element={<Profile user={user} />} />
+              <Route path="/user/:email" element={<UserProfile />} />
+              <Route path="/property/:id" element={<PropertyDetails />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/my-deals" element={<MyDeals />} />
+              <Route path="/chat/:propertyId" element={<Chat />} />
+              <Route path="/ai-match" element={<AIMatch />} />
+              <Route path="/rent-manager" element={<RentManager />} />
+              <Route path="/maintenance" element={<Maintenance />} />
+              <Route path="/analytics" element={<Analytics />} />
 
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-        </Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+            </Routes>
+          </div>
+
+          <Footer />
+        </div>
       </Router>
     </ThemeProvider>
   );

@@ -136,4 +136,23 @@ router.delete("/cleanup/orphaned", async (req, res) => {
   }
 });
 
+/* ================= DELETE SINGLE NOTIFICATION ================= */
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const notification = await Notification.findById(req.params.id);
+    
+    if (!notification) {
+      return res.status(404).json({ message: "Notification not found" });
+    }
+
+    await Notification.findByIdAndDelete(req.params.id);
+    
+    res.json({ message: "Notification deleted successfully" });
+  } catch (err) {
+    console.error("DELETE NOTIFICATION ERROR:", err);
+    res.status(500).json({ message: "Failed to delete notification" });
+  }
+});
+
 module.exports = router;

@@ -1,7 +1,24 @@
 const router = require("express").Router();
-const {register,login} = require("../controllers/authController");
+const User = require("../models/User");
 
-router.post("/register",register);
-router.post("/login",login);
+// Register
+router.post("/register", async (req, res) => {
+  try {
+    const user = await User.create(req.body);
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: "Registration failed" });
+  }
+});
+
+// Login
+router.post("/login", async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.body.email });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: "Login failed" });
+  }
+});
 
 module.exports = router;

@@ -35,8 +35,35 @@ const AddProperty = () => {
     description: ""
   });
 
-  const [image, setImage] = useState<File | null>(null);
+  const [images, setImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    if (files.length + images.length > 5) {
+      alert("You can upload maximum 5 images");
+      return;
+    }
+    
+    const newImages = [...images, ...files].slice(0, 5);
+    setImages(newImages);
+    
+    // Create preview URLs
+    const previews = newImages.map(file => URL.createObjectURL(file));
+    setImagePreviews(previews);
+  };
+
+  const removeImage = (index: number) => {
+    const newImages = images.filter((_, i) => i !== index);
+    setImages(newImages);
+    
+    // Revoke old URL and create new previews
+    URL.revokeObjectURL(imagePreviews[index]);
+    const previews = newImages.map(file => URL.createObjectURL(file));
+    setImagePreviews(previews);
+  };
 
   const handleChange = (
     e: React.ChangeEvent<
@@ -77,8 +104,8 @@ const AddProperty = () => {
       return;
     }
 
-    if (!image) {
-      alert("Upload an image");
+    if (images.length === 0) {
+      alert("Upload at least one image");
       return;
     }
 
@@ -86,21 +113,28 @@ const AddProperty = () => {
 
     const formData = new FormData();
 
+    // Append form fields except amenities (handled separately)
     Object.entries(form).forEach(([key, value]) => {
-      formData.append(key, value);
+      if (key !== "amenities") {
+        formData.append(key, value);
+      }
     });
 
-    // clean amenities array
-    formData.append(
-      "amenities",
-      JSON.stringify(
-        form.amenities.split(",").map(a => a.trim()).filter(Boolean)
-      )
-    );
+    // Clean amenities - send as comma-separated string
+    const cleanAmenities = form.amenities
+      .split(",")
+      .map(a => a.trim())
+      .filter(Boolean)
+      .join(",");
+    formData.append("amenities", cleanAmenities);
 
     // attach owner uid
     formData.append("ownerEmail", auth.currentUser.email!);
-    formData.append("image", image);
+    
+    // Append all images
+    images.forEach(img => {
+      formData.append("images", img);
+    });
 
     try {
       const res = await fetch(`${API}/properties`, {
@@ -309,27 +343,112 @@ const AddProperty = () => {
         {/* Image Upload */}
         <div style={{ marginBottom: "32px" }}>
           <label style={{ display: "block", marginBottom: "8px", color: "#cbd5e1", fontWeight: "600", fontSize: "13px" }}>
-            Property Image
+            Property Images ({images.length}/5)
           </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={e => setImage(e.target.files?.[0] || null)}
-            style={{
-              width: "100%",
-              padding: "12px 14px",
+          
+          {/* Image Previews Grid */}
+          {imagePreviews.length > 0 && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
+              gap: "12px",
+              marginBottom: "16px"
+            }}>
+              {imagePreviews.map((preview, index) => (
+                <div 
+                  key={index}
+                  style={{
+                    position: "relative",
+                    aspectRatio: "1",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    border: index === 0 ? "2px solid #6366f1" : "1px solid #404040"
+                  }}
+                >
+                  <img 
+                    src={preview} 
+                    alt={`Preview ${index + 1}`}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover"
+                    }}
+                  />
+                  {index === 0 && (
+                    <span style={{
+                      position: "absolute",
+                      top: "4px",
+                      left: "4px",
+                      background: "#6366f1",
+                      color: "white",
+                      fontSize: "10px",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      fontWeight: "600"
+                    }}>
+                      Main
+                    </span>
+                  )}
+                  <button
+                    onClick={() => removeImage(index)}
+                    style={{
+                      position: "absolute",
+                      top: "4px",
+                      right: "4px",
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "50%",
+                      background: "rgba(239, 68, 68, 0.9)",
+                      color: "white",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      lineHeight: 1
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Upload Button */}
+          {images.length < 5 && (
+            <label style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "24px",
               background: "#1a1a1a",
               border: "2px dashed #404040",
               borderRadius: "8px",
-              color: "#cbd5e1",
               cursor: "pointer",
-              transition: "all 0.2s ease",
-              boxSizing: "border-box"
+              transition: "all 0.2s ease"
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "#6366f1"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "#404040"; }}
-          />
-          {image && <p style={{ color: "#6366f1", fontSize: "13px", marginTop: "8px", margin: "8px 0 0 0" }}>✓ {image.name}</p>}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6366f1"; e.currentTarget.style.background = "#0a0a0a"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#404040"; e.currentTarget.style.background = "#1a1a1a"; }}
+            >
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageChange}
+                style={{ display: "none" }}
+              />
+              <span style={{ fontSize: "32px", marginBottom: "8px" }}>📷</span>
+              <span style={{ color: "#cbd5e1", fontSize: "14px", fontWeight: "500" }}>
+                Click to upload images
+              </span>
+              <span style={{ color: "#888", fontSize: "12px", marginTop: "4px" }}>
+                {images.length === 0 ? "Add up to 5 images" : `Add ${5 - images.length} more image${5 - images.length !== 1 ? 's' : ''}`}
+              </span>
+            </label>
+          )}
         </div>
 
         {/* Submit Button */}
