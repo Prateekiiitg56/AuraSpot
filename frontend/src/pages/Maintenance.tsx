@@ -134,9 +134,10 @@ const Maintenance = () => {
     return MAINTENANCE_CATEGORIES.find(c => c.value === category)?.icon || "📋";
   };
 
-  const filteredRequests = statusFilter === "ALL" 
+  const filteredRequests = (statusFilter === "ALL" 
     ? requests 
-    : requests.filter(r => r.status === statusFilter);
+    : requests.filter(r => r.status === statusFilter))
+    .filter(r => r.property !== null); // Filter out requests with deleted properties
 
   const updateStatus = async (requestId: string, newStatus: string) => {
     if (!currentUser?.email) return;
@@ -409,7 +410,7 @@ const Maintenance = () => {
                             {req.title}
                           </h3>
                           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: isDark ? "#94a3b8" : "#64748b" }}>
-                            {req.property.title} • {req.property.city}
+                            {req.property?.title || "Property"} • {req.property?.city || "Unknown"}
                           </p>
                         </div>
                       </div>
@@ -439,7 +440,7 @@ const Maintenance = () => {
                       <span style={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "12px" }}>
                         {new Date(req.createdAt).toLocaleDateString()}
                       </span>
-                      {activeTab === "owner" && (
+                      {activeTab === "owner" && req.tenant && (
                         <span style={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "12px" }}>
                           By: {req.tenant.name}
                         </span>
@@ -473,12 +474,14 @@ const Maintenance = () => {
                         {selectedRequest.title}
                       </h2>
                     </div>
-                    <Link 
-                      to={`/property/${selectedRequest.property._id}`}
-                      style={{ color: "#667eea", fontSize: "14px", textDecoration: "none" }}
-                    >
-                      {selectedRequest.property.title} →
-                    </Link>
+                    {selectedRequest.property && (
+                      <Link 
+                        to={`/property/${selectedRequest.property._id}`}
+                        style={{ color: "#667eea", fontSize: "14px", textDecoration: "none" }}
+                      >
+                        {selectedRequest.property.title} →
+                      </Link>
+                    )}
                   </div>
                   <button
                     onClick={() => setSelectedRequest(null)}
@@ -547,14 +550,14 @@ const Maintenance = () => {
                   </h4>
                   <div style={{ color: isDark ? "#f1f5f9" : "#1e293b", fontSize: "14px" }}>
                     <p style={{ margin: "0 0 4px 0" }}>
-                      <strong>{activeTab === "owner" ? selectedRequest.tenant.name : selectedRequest.owner.name}</strong>
+                      <strong>{activeTab === "owner" ? selectedRequest.tenant?.name || "Unknown" : selectedRequest.owner?.name || "Unknown"}</strong>
                     </p>
                     <p style={{ margin: "0", color: isDark ? "#94a3b8" : "#64748b" }}>
-                      {activeTab === "owner" ? selectedRequest.tenant.email : selectedRequest.owner.email}
+                      {activeTab === "owner" ? selectedRequest.tenant?.email || "N/A" : selectedRequest.owner?.email || "N/A"}
                     </p>
-                    {(activeTab === "owner" ? selectedRequest.tenant.phone : selectedRequest.owner.phone) && (
+                    {(activeTab === "owner" ? selectedRequest.tenant?.phone : selectedRequest.owner?.phone) && (
                       <p style={{ margin: "4px 0 0 0", color: isDark ? "#94a3b8" : "#64748b" }}>
-                        📞 {activeTab === "owner" ? selectedRequest.tenant.phone : selectedRequest.owner.phone}
+                        📞 {activeTab === "owner" ? selectedRequest.tenant?.phone : selectedRequest.owner?.phone}
                       </p>
                     )}
                   </div>

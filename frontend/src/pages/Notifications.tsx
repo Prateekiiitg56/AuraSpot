@@ -53,11 +53,12 @@ const Notifications = () => {
 
   /* ================= ACCEPT REQUEST ================= */
 
-  const acceptRequest = async (propertyId: string) => {
+  const acceptRequest = async (propertyId: string, userId: string) => {
     try {
       const res = await fetch(`${API}/properties/${propertyId}/approve`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }) // Pass the user ID to approve
       });
 
       if (!res.ok) {
@@ -72,6 +73,32 @@ const Notifications = () => {
     } catch (err) {
       console.error("Accept error:", err);
       alert("Failed to accept deal");
+    }
+  };
+
+  /* ================= REJECT REQUEST ================= */
+
+  const rejectRequest = async (notificationId: string) => {
+    if (!window.confirm("Are you sure you want to reject this request? The user will be notified.")) return;
+
+    try {
+      const res = await fetch(`${API}/notifications/reject/${notificationId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Reject failed");
+      }
+
+      alert("Request rejected. The user has been notified.");
+      
+      // Fetch fresh data
+      await loadNotifications();
+    } catch (err) {
+      console.error("Reject error:", err);
+      alert("Failed to reject request");
     }
   };
 
@@ -525,7 +552,7 @@ const Notifications = () => {
                     {new Date(note.createdAt).toLocaleString()}
                   </small>
 
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     <Link
                       to={`/user/${note.from?.email}`}
                       style={{
@@ -551,8 +578,33 @@ const Notifications = () => {
                     >
                       👤 Profile
                     </Link>
+                    <Link
+                      to={`/chat/${note.property?._id}?with=${note.from?.email}`}
+                      style={{
+                        padding: "8px 16px",
+                        background: "rgba(59, 130, 246, 0.2)",
+                        border: "1px solid rgba(59, 130, 246, 0.3)",
+                        color: "#93c5fd",
+                        borderRadius: "6px",
+                        textDecoration: "none",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.3s ease"
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(59, 130, 246, 0.3)";
+                        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(59, 130, 246, 0.5)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(59, 130, 246, 0.2)";
+                        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(59, 130, 246, 0.3)";
+                      }}
+                    >
+                      💬 Chat First
+                    </Link>
                     <button
-                      onClick={() => acceptRequest(note.property._id)}
+                      onClick={() => acceptRequest(note.property._id, note.from._id)}
                       style={{
                         padding: "8px 16px",
                         background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
@@ -574,6 +626,30 @@ const Notifications = () => {
                       }}
                     >
                       ✓ Accept
+                    </button>
+                    <button
+                      onClick={() => rejectRequest(note._id)}
+                      style={{
+                        padding: "8px 16px",
+                        background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+                        border: "none",
+                        color: "white",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.3s ease"
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
+                        (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(239, 68, 68, 0.4)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+                        (e.currentTarget as HTMLButtonElement).style.boxShadow = "none";
+                      }}
+                    >
+                      ✗ Reject
                     </button>
                   </div>
                 </div>

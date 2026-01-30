@@ -331,17 +331,32 @@ router.post("/:id/request", async (req, res) => {
     const property = await Property.findById(req.params.id)
       .populate("owner");
 
-    if (!property || property.status !== "AVAILABLE") {
-      return res.status(400).json({ message: "Property not available" });
+    if (!property) {
+      return res.status(404).json({ message: "Property not found" });
     }
 
-    // Increment contact requests count
+    // Only block if property is actually BOOKED or SOLD (approved by owner)
+    if (property.status === "BOOKED" || property.status === "SOLD") {
+      return res.status(400).json({ message: "Property is no longer available" });
+    }
+
+    // Check if user already has a pending request for this property
+    const existingRequest = await Notification.findOne({
+      from: user._id,
+      property: property._id,
+      action: { $in: ["RENT", "BUY"] }
+    });
+
+    if (existingRequest) {
+      return res.status(400).json({ message: "You have already requested this property" });
+    }
+
+    // Increment contact requests count (for analytics)
     property.contactRequests = (property.contactRequests || 0) + 1;
-    property.status = "REQUESTED";
-    property.assignedTo = user._id;
+    // Keep status as AVAILABLE - property remains open for other requests
     await property.save();
 
-    // Create notification for owner
+    // Create notification for owner (this tracks the request)
     await Notification.create({
       from: user._id,
       to: property.owner._id,
@@ -421,16 +436,32 @@ router.post("/ai-match", async (req, res) => {
 
 router.post("/:id/approve", async (req, res) => {
   try {
-    const property = await Property.findById(req.params.id)
-      .populate("owner")
-      .populate("assignedTo");
-
-    if (!property || property.status !== "REQUESTED") {
-      return res.status(400).json({ message: "Invalid state" });
+    const { userId } = req.body; // The user being approved (from notification)
+    
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
     }
 
-    // Update property status to SOLD or BOOKED
+    const property = await Property.findById(req.params.id)
+      .populate("owner");
+
+    if (!property) {
+      return res.status(404).json({ message: "Property not found" });
+    }
+
+    // Property must be AVAILABLE (multiple requests possible)
+    if (property.status === "BOOKED" || property.status === "SOLD") {
+      return res.status(400).json({ message: "Property is already booked/sold" });
+    }
+
+    const assignedUser = await User.findById(userId);
+    if (!assignedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update property status to SOLD or BOOKED and assign user
     property.status = property.purpose === "SALE" ? "SOLD" : "BOOKED";
+    property.assignedTo = assignedUser._id;
     await property.save();
 
     // Increment owner's successful deals and update trust badge

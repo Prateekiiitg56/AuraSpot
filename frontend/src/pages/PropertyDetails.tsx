@@ -112,6 +112,7 @@ const PropertyDetails = () => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [hasRequested, setHasRequested] = useState(false); // Track if user has already requested
 
   // Maintenance state
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
@@ -136,10 +137,28 @@ const PropertyDetails = () => {
       if (currentUser && data.assignedTo?.email === currentUser.email) {
         loadMaintenanceRequests();
       }
+
+      // Check if current user has already requested this property
+      if (currentUser) {
+        checkIfRequested();
+      }
     } catch (err) {
       console.error("Failed loading property", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkIfRequested = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`${API}/notifications/check-request/${id}/${currentUser.email}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHasRequested(data.hasRequested);
+      }
+    } catch (err) {
+      // Silent fail
     }
   };
 
@@ -172,7 +191,8 @@ const PropertyDetails = () => {
     property.assignedTo?.email &&
     currentUser.email === property.assignedTo.email;
 
-const isUnavailable = property.status !== "AVAILABLE";
+// Property is only unavailable when BOOKED or SOLD (approved by owner)
+const isUnavailable = property.status === "BOOKED" || property.status === "SOLD";
 
 // Chat is available for:
 // 1. Owner and assigned user when property is BOOKED/SOLD
@@ -280,8 +300,10 @@ const canChat = currentUser && !isOwner;
 
     if (isUnavailable) return alert("Property already booked");
 
+    if (hasRequested) return alert("You have already requested this property");
+
     try {
-      // Send request via property endpoint (updates property status + creates notification)
+      // Send request via property endpoint (creates notification for owner)
       const res = await fetch(`${API}/properties/${property._id}/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -297,11 +319,10 @@ const canChat = currentUser && !isOwner;
         throw new Error(error.message || "Request failed");
       }
 
-      alert("Request sent to owner!");
+      alert("Request sent to owner! You'll be notified when they respond.");
       setMessage("");
+      setHasRequested(true); // Update local state
       
-      // Reload property to get updated status
-      await loadProperty();
     } catch (err) {
       console.error("Send request error:", err);
       alert(`Failed to send request: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -816,7 +837,7 @@ const canChat = currentUser && !isOwner;
         </div>
 
         {/* Request/Action Section */}
-        {!isOwner && currentUser && !isUnavailable && (
+        {!isOwner && currentUser && !isUnavailable && !hasRequested && (
           <div style={{ marginBottom: "48px" }}>
             <h2 style={{ fontSize: "24px", marginBottom: "16px", color: "#f1f5f9" }}>💬 Contact Owner</h2>
             <div style={{
@@ -851,6 +872,24 @@ const canChat = currentUser && !isOwner;
                 }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Show "Request Sent" message if user has already requested */}
+        {!isOwner && currentUser && !isUnavailable && hasRequested && (
+          <div style={{
+            marginBottom: "48px",
+            padding: "24px",
+            background: "linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)",
+            border: "1px solid rgba(16, 185, 129, 0.3)",
+            borderRadius: "12px",
+            textAlign: "center"
+          }}>
+            <div style={{ fontSize: "48px", marginBottom: "12px" }}>✅</div>
+            <h3 style={{ color: "#10b981", marginBottom: "8px", fontSize: "20px" }}>Request Sent!</h3>
+            <p style={{ color: "#6ee7b7", fontSize: "14px", margin: 0 }}>
+              You've already requested this property. The owner will review and respond to your request.
+            </p>
           </div>
         )}
 
@@ -942,7 +981,7 @@ const canChat = currentUser && !isOwner;
             </>
           )}
 
-          {!isOwner && currentUser && !isUnavailable && (
+          {!isOwner && currentUser && !isUnavailable && !hasRequested && (
             <button
               onClick={sendRequest}
               style={{

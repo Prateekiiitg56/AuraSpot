@@ -1584,7 +1584,7 @@ const Profile = ({ user }: { user: User | null }) => {
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  {rentalHistory.map((history) => (
+                  {rentalHistory.filter(h => h.property !== null).map((history) => (
                     <div
                       key={history._id}
                       style={{
@@ -1636,7 +1636,7 @@ const Profile = ({ user }: { user: User | null }) => {
                         {/* Property Details */}
                         <div style={{ flex: 1 }}>
                           <Link 
-                            to={`/property/${history.property._id}`}
+                            to={`/property/${history.property?._id || ''}`}
                             style={{
                               fontSize: "16px",
                               fontWeight: "600",

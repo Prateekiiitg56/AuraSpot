@@ -72,7 +72,7 @@ const Chat: React.FC = () => {
     }
     
     // Check if there's a user param in URL (for direct chat)
-    const userParam = searchParams.get("user");
+    const userParam = searchParams.get("user") || searchParams.get("with");
     if (userParam) {
       setSelectedThread(userParam);
       setOtherUserEmail(userParam);
