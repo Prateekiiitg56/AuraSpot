@@ -6,22 +6,38 @@ const connectDB = require("./config/db");
 const app = express();
 const path = require("path");
 
+// Connect to database
 connectDB();
 
 // CORS configuration for production
 const corsOptions = {
   origin: process.env.CORS_ORIGINS 
-    ? process.env.CORS_ORIGINS.split(",") 
+    ? process.env.CORS_ORIGINS.split(",").map(s => s.trim())
     : ["http://localhost:5173", "http://localhost:3000"],
-  credentials: true
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Health check endpoint
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "AuraSpot API is running" });
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Static files (won't work in serverless but kept for local dev)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Routes
 app.use("/auth", require("./routes/authRoutes"));
 app.use("/properties", require("./routes/propertyRoutes"));
-app.use(express.urlencoded({ extended: true }));
 app.use("/users", require("./routes/userRoutes"));
 app.use("/notifications", require("./routes/notificationRoutes"));
 app.use("/chat", require("./routes/chatRoutes"));
