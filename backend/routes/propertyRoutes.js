@@ -12,14 +12,14 @@ const router = express.Router();
 
 /* ================= MULTER ================= */
 
-const storage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  }
-});
+// Use memory storage for serverless (Vercel has read-only filesystem)
+// For production, you should upload to cloud storage (Cloudinary, S3, etc.)
+const storage = multer.memoryStorage();
 
-const upload = multer({ storage });
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
 /* ================= CREATE PROPERTY ================= */
 
@@ -49,9 +49,19 @@ router.post("/", upload.array("images", 5), async (req, res) => {
       amenities = rawAmenities.map(a => String(a).trim()).filter(Boolean);
     }
 
-    // Handle multiple images
+    // Handle multiple images - with memory storage, files are in buffer
+    // For production, upload to cloud storage (Cloudinary/S3) and store URLs
+    // For now, we'll store placeholder names or skip if no cloud storage configured
     const imageFiles = req.files || [];
-    const imageFilenames = imageFiles.map(file => file.filename);
+    let imageFilenames = [];
+    
+    if (imageFiles.length > 0) {
+      // In serverless, we can't save to disk. Store as placeholder or implement cloud upload
+      // For now, generate unique names (in production, these would be cloud URLs)
+      imageFilenames = imageFiles.map((file, index) => 
+        `property_${Date.now()}_${index}_${file.originalname.replace(/[^a-zA-Z0-9.]/g, '_')}`
+      );
+    }
 
     const property = await Property.create({
       title: req.body.title,
@@ -87,6 +97,7 @@ router.post("/", upload.array("images", 5), async (req, res) => {
 
     res.json(property);
   } catch (err) {
+    console.error("CREATE PROPERTY ERROR:", err);
     res.status(500).json({ message: "Failed to add property" });
   }
 });

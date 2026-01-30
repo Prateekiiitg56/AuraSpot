@@ -40,8 +40,10 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Static files (won't work in serverless but kept for local dev)
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Static files - only for local development (Vercel has read-only filesystem)
+if (process.env.NODE_ENV !== "production") {
+  app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+}
 
 // Routes
 app.use("/auth", require("./routes/authRoutes"));
