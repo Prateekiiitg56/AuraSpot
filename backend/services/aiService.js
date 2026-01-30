@@ -3,9 +3,11 @@
  * Single AI model with caching and smart prompt engineering
  */
 
-const DEEPSEEK_API_KEY = "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";
-const DEEPSEEK_MODEL = "tngtech/deepseek-r1t2-chimera:free";
-const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+require("dotenv").config();
+
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "tngtech/deepseek-r1t2-chimera:free";
+const API_URL = process.env.OPENROUTER_API_URL || "https://openrouter.ai/api/v1/chat/completions";
 
 // In-memory cache for quick responses (with TTL)
 const responseCache = new Map();
