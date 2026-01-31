@@ -1,6 +1,6 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { API } from "../services/api";
+import { API, getImageUrl } from "../services/api";
 import { auth } from "../services/firebase";
 import MapDisplay from "../components/MapDisplay";
 import { AIInsightsPanel, FraudRiskBadge, AIChatBox } from "../components/AIComponents";
@@ -361,7 +361,7 @@ const canChat = currentUser && !isOwner;
             boxShadow: "0 20px 40px rgba(102, 126, 234, 0.15)"
           }}>
             <img
-              src={`${API}/uploads/${allImages[currentImageIndex]}`}
+              src={getImageUrl(allImages[currentImageIndex])}
               className="details-img"
               alt={`${property.title} - Image ${currentImageIndex + 1}`}
               style={{
@@ -478,7 +478,7 @@ const canChat = currentUser && !isOwner;
                   onMouseLeave={(e) => { if (currentImageIndex !== index) e.currentTarget.style.opacity = "0.6"; }}
                 >
                   <img
-                    src={`${API}/uploads/${img}`}
+                    src={getImageUrl(img)}
                     alt={`Thumbnail ${index + 1}`}
                     style={{
                       width: "100%",

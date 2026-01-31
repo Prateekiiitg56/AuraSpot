@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API } from "../services/api";
+import { API, getImageUrl } from "../services/api";
 import { auth } from "../services/firebase";
 import { Link } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
@@ -361,7 +361,7 @@ const MyDeals = () => {
               <Link to={`/property/${p._id}`} style={{ textDecoration: "none", color: "inherit" }}>
                 {p.image && (
                   <img
-                    src={`${API}/uploads/${p.image}`}
+                    src={getImageUrl(p.image)}
                     alt={p.title}
                     style={{ width: "100%", height: "160px", objectFit: "cover" }}
                   />
@@ -375,7 +375,7 @@ const MyDeals = () => {
                 </div>
               </Link>
               
-              {/* Edit & Delete Actions */}
+              {/* Edit & Delete Actions */}}
               <div style={{
                 padding: "12px 16px",
                 borderTop: darkMode ? "1px solid rgba(226, 232, 240, 0.1)" : "1px solid #e5e7eb",
@@ -460,7 +460,7 @@ const MyDeals = () => {
               <Link to={`/property/${p._id}`} style={{ textDecoration: "none", color: "inherit" }}>
                 {p.image && (
                   <img
-                    src={`${API}/uploads/${p.image}`}
+                    src={getImageUrl(p.image)}
                     alt={p.title}
                     style={{ width: "100%", height: "160px", objectFit: "cover" }}
                   />

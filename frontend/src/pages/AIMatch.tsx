@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API } from "../services/api";
+import { API, getImageUrl } from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 import "../App.css";
 
@@ -167,7 +167,7 @@ const AIMatch: React.FC = () => {
       {/* Image */}
       <div style={{ height: "160px", overflow: "hidden" }}>
         <img
-          src={property.image ? `${API}/uploads/${property.image}` : "https://via.placeholder.com/300x200?text=No+Image"}
+          src={getImageUrl(property.image)}
           alt={property.title}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />

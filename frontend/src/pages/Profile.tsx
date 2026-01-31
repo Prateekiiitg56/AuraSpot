@@ -2,7 +2,7 @@ import { signOut } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { auth } from "../services/firebase";
 import { useState, useEffect } from "react";
-import { API } from "../services/api";
+import { API, getImageUrl } from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 import { Link } from "react-router-dom";
 
@@ -1611,7 +1611,7 @@ const Profile = ({ user }: { user: User | null }) => {
                         }}>
                           {history.property?.image || history.property?.images?.[0] ? (
                             <img
-                              src={`${API}/uploads/${history.property.image || history.property.images?.[0]}`}
+                              src={getImageUrl(history.property.image || history.property.images?.[0])}
                               alt={history.property.title}
                               style={{
                                 width: "100%",

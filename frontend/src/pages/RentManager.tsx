@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../services/firebase";
-import { API } from "../services/api";
+import { API, getImageUrl } from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 import "../App.css";
 
@@ -347,9 +347,7 @@ const RentManager: React.FC = () => {
         {/* Property Header */}
         <div style={{ display: "flex", gap: "16px", padding: "20px" }}>
           <img
-            src={agreement.property?.image 
-              ? `${API}/uploads/${agreement.property.image}` 
-              : "https://via.placeholder.com/120x80?text=No+Image"}
+            src={getImageUrl(agreement.property?.image)}
             alt={agreement.property?.title}
             style={{
               width: "120px",
@@ -841,9 +839,7 @@ const RentManager: React.FC = () => {
                     >
                       <div style={{ display: "flex", gap: "12px" }}>
                         <img
-                          src={property.image 
-                            ? `${API}/uploads/${property.image}` 
-                            : "https://via.placeholder.com/80x60?text=No+Image"}
+                          src={getImageUrl(property.image)}
                           alt={property.title}
                           style={{
                             width: "80px",
@@ -1116,9 +1112,7 @@ const RentManager: React.FC = () => {
               gap: "12px"
             }}>
               <img
-                src={selectedProperty.image 
-                  ? `${API}/uploads/${selectedProperty.image}` 
-                  : "https://via.placeholder.com/80x60?text=No+Image"}
+                src={getImageUrl(selectedProperty.image)}
                 alt={selectedProperty.title}
                 style={{
                   width: "80px",
