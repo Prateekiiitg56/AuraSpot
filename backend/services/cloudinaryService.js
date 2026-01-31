@@ -1,11 +1,18 @@
 const cloudinary = require("cloudinary").v2;
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+// Configure Cloudinary - supports both CLOUDINARY_URL and separate variables
+if (process.env.CLOUDINARY_URL) {
+  // If CLOUDINARY_URL is set, cloudinary auto-configures from it
+  console.log("[CLOUDINARY] Configured via CLOUDINARY_URL");
+} else {
+  // Otherwise use separate variables
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+  console.log("[CLOUDINARY] Configured via separate env vars");
+}
 
 /**
  * Upload image buffer to Cloudinary
